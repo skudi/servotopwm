@@ -5,16 +5,30 @@
 #endif
 #include "MotorController.h"
 
+//servo inputs
+//number of input pins
+#define INPINCNT sizeof(inPinNo)/sizeof(inPinNo[0])
+
 #ifdef BOARD_NANO
 
 /* Nano PWM pin: 3, 5, 6, 9, 10, 11 */
+
+//throttle
+#define INPTHRPIN 2
+//steering wheel
+#define INPTURNPIN 3
+
+//PWM outputs
 #define ENGFWDPIN 11
 #define ENGBCKPIN 10
-
 #define RIGHTPIN	6
 #define LEFTPIN	5
 
 #define BAUDRATE 9600
+
+#ifdef DEBUG
+#define TESTOUTPIN 9
+#endif
 
 #endif
 
@@ -31,11 +45,9 @@
 * D8 - gpio15
 */
 
-//servo inputs
-//number of input pins
-#define INPINCNT sizeof(inPinNo)/sizeof(inPinNo[0])
 //throttle
 #define INPTHRPIN 14
+//steering wheel
 #define INPTURNPIN 12
 
 //PWM outputs
