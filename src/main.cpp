@@ -3,6 +3,7 @@
 //Servo library for generating test signal
 #include <Servo.h>
 #endif
+
 #include "MotorController.h"
 
 //servo inputs
@@ -11,14 +12,13 @@
 
 #ifdef BOARD_NANO
 
-/* Nano PWM pin: 3, 5, 6, 9, 10, 11 */
-
 //throttle
 #define INPTHRPIN 2
 //steering wheel
 #define INPTURNPIN 3
 
 //PWM outputs
+/* Nano PWM pin: 3, 5, 6, 9, 10, 11 */
 #define ENGFWDPIN 11
 #define ENGBCKPIN 10
 #define RIGHTPIN	6
@@ -80,26 +80,46 @@ uint8_t inPinNo[] = {INPTHRPIN, INPTURNPIN};
 int16_t inPulseTime[INPINCNT]; //length of the throttle pulse [us], -1 = invalid
 unsigned long inPulseStart[INPINCNT]; //begin of pulse micros()
 uint8_t inPinVal[INPINCNT];
+struct Engines {
+	MotorController* drive;
+	MotorController* stwheel;
+};
+union Motors {
+	Engines engines;
+	MotorController* list[];
+};
+
+int16_t servoPulseMin=1000;
+int16_t servoPulseMax=2000;
+int16_t servoTrim[INPINCNT]; //pulse time for neutral position
+
+Motors motors;
 
 void setup() {
-	pinMode(ENGFWDPIN, OUTPUT);
 	//configure input pins as inputs and read initial values
-	for (uint8_t i=1; i<INPINCNT; i++) {
+	for (uint8_t i=0; i<INPINCNT; i++) {
 		pinMode(inPinNo[i], INPUT);
 		inPinVal[i] = digitalRead(inPinNo[i]);
 		inPulseTime[i] = -1;
 		inPulseStart[i] = 0;
+		servoTrim[i] = (servoPulseMax + servoPulseMin)/2;
 	}
+	motors.engines.drive = new MotorController(ENGFWDPIN, ENGBCKPIN, -1U);
+	motors.engines.stwheel = new MotorController(LEFTPIN, RIGHTPIN, -1U);
 #ifdef DEBUG
 	pinMode(TESTOUTPIN, OUTPUT);
 	Serial.begin(BAUDRATE);
-	Serial.print("debug mode inputs:");
-	Serial.println(INPINCNT);
+	DEBUGOUT("\ndebug mode inputs:");
+	DEBUGOUT(INPINCNT);
 #endif
+	DEBUGOUT("\ntrim:");
+	DEBUGOUT(servoTrim[0]);
+	DEBUGOUT(",");
+	DEBUGOUT(servoTrim[1]);
+	DEBUGOUT("\n");
 #ifdef TESTOUTPIN
 	testout.attach(TESTOUTPIN);
 #endif
-
 }
 
 
@@ -126,7 +146,21 @@ void loop() {
 				//High to Low transition
 				inPulseTime[i] = nowus - inPulseStart[i];
 				inPulseStart[i] = nowus;
-			}
+				if ((inPulseTime[i] > servoPulseMax) || (inPulseTime[i] < servoPulseMin)) {
+					inPulseTime[i] = -1;
+				} else {
+					float engVal = (float)(inPulseTime[i] - servoTrim[i]) / (float)(servoPulseMax - servoPulseMin) *2.0 ;
+					motors.list[i]->set(engVal);
+					DEBUGOUT(i);
+					DEBUGOUT(" ");
+					DEBUGOUT(inPulseTime[i]);
+					DEBUGOUT("-");
+					DEBUGOUT(servoTrim[i]);
+					DEBUGOUT("=");
+					DEBUGOUT(engVal);
+					DEBUGOUT("\n");
+				}
+			} 
 		}
 		inPinVal[i] = newPinVal;
 		if (inPulseStart[i] < nowus - 21000) {
@@ -136,26 +170,17 @@ void loop() {
 	}
 #ifdef DEBUG
 	if (millis() >= lastms + 20) {
-		DEBUGOUT(millis() - lastms);
-		DEBUGOUT(" ");
-		for (uint8_t i=0; i<INPINCNT; i++) {
-			DEBUGNUM(inPulseTime[i], DEC);
-			DEBUGOUT(" ");
-		}
-		DEBUGOUT(" ");
 		loopcnt = 0;
 		duty+=step;
 		if (duty >1 or duty <0) {
 			step = -step;
 			duty+=step;
 		}
-		DEBUGOUT(duty);
 		analogWrite(ENGFWDPIN, duty * PWMRANGE);
 #ifdef TESTOUTPIN
 		testout.write(180*duty);
 #endif
 		lastms = millis();
-		DEBUGOUT("\n");
 	}
 	loopcnt++;
 #endif
