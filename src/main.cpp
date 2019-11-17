@@ -27,7 +27,7 @@
 #define BAUDRATE 9600
 
 #ifdef DEBUG
-#define TESTOUTPIN 9
+//#define TESTOUTPIN 9
 #endif
 
 #endif
@@ -59,7 +59,7 @@
 #define BAUDRATE 115200
 
 #ifdef DEBUG
-#define TESTOUTPIN 15
+//#define TESTOUTPIN 15
 #endif
 
 #endif
@@ -91,6 +91,7 @@ union Motors {
 
 int16_t servoPulseMin=1000;
 int16_t servoPulseMax=2000;
+int16_t servoDeadZone=50;
 int16_t servoTrim[INPINCNT]; //pulse time for neutral position
 
 Motors motors;
@@ -107,23 +108,23 @@ void setup() {
 	motors.engines.drive = new MotorController(ENGFWDPIN, ENGBCKPIN, -1U);
 	motors.engines.stwheel = new MotorController(LEFTPIN, RIGHTPIN, -1U);
 #ifdef DEBUG
-	pinMode(TESTOUTPIN, OUTPUT);
 	Serial.begin(BAUDRATE);
+#endif
 	DEBUGOUT("\ndebug mode inputs:");
 	DEBUGOUT(INPINCNT);
-#endif
 	DEBUGOUT("\ntrim:");
 	DEBUGOUT(servoTrim[0]);
 	DEBUGOUT(",");
 	DEBUGOUT(servoTrim[1]);
 	DEBUGOUT("\n");
 #ifdef TESTOUTPIN
+	pinMode(TESTOUTPIN, OUTPUT);
 	testout.attach(TESTOUTPIN);
 #endif
 }
 
 
-#ifdef DEBUG
+#ifdef TESTOUTPIN
 float duty = 0.0;
 float step = 0.05;
 unsigned long lastms = 0;
@@ -149,7 +150,12 @@ void loop() {
 				if ((inPulseTime[i] > servoPulseMax) || (inPulseTime[i] < servoPulseMin)) {
 					inPulseTime[i] = -1;
 				} else {
-					float engVal = (float)(inPulseTime[i] - servoTrim[i]) / (float)(servoPulseMax - servoPulseMin) *2.0 ;
+					int engInt = inPulseTime[i] - servoTrim[i];
+					float engVal = 0;
+					if (abs(engInt) > servoDeadZone) {
+						engVal = (float)(engInt) / (float)(servoPulseMax - servoPulseMin) *2.0 ;
+					}
+					
 					motors.list[i]->set(engVal);
 					DEBUGOUT(i);
 					DEBUGOUT(" ");
@@ -168,7 +174,7 @@ void loop() {
 			inPulseTime[i] = -1;
 		}
 	}
-#ifdef DEBUG
+#ifdef TESTOUTPIN
 	if (millis() >= lastms + 20) {
 		loopcnt = 0;
 		duty+=step;
@@ -177,9 +183,7 @@ void loop() {
 			duty+=step;
 		}
 		analogWrite(ENGFWDPIN, duty * PWMRANGE);
-#ifdef TESTOUTPIN
 		testout.write(180*duty);
-#endif
 		lastms = millis();
 	}
 	loopcnt++;
