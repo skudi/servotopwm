@@ -18,7 +18,16 @@
 #define INPTURNPIN 3
 
 //PWM outputs
-/* Nano PWM pin: 3, 5, 6, 9, 10, 11 */
+/* PWM pins:
+ * - Nano (atmega 328), Decimila (atmega 168), atmega8: 
+ *   ||= analogWrite\\pin =|= m168p pin#/name =||
+ *   || 3 | 25 / PC2 ||
+ *   || 5 | 27 / PC4 ||
+ *   || 6 | 28 / PC5 ||
+ *   || 9 | 15 / PB1 ||
+ *   || 10 | 16 / PB2 ||
+ *   || 11 | 17 / PB3 ||
+ */
 #define ENGFWDPIN 11
 #define ENGBCKPIN 10
 #define RIGHTPIN	6
