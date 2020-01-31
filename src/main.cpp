@@ -5,6 +5,7 @@
 #endif
 
 #include "MotorController.h"
+#include "BinaryMotorController.h"
 
 //servo inputs
 //number of input pins
@@ -89,37 +90,29 @@ uint8_t inPinNo[] = {INPTHRPIN, INPTURNPIN};
 int16_t inPulseTime[INPINCNT]; //length of the throttle pulse [us], -1 = invalid
 unsigned long inPulseStart[INPINCNT]; //begin of pulse micros()
 uint8_t inPinVal[INPINCNT];
-struct Engines {
-	MotorController* drive;
-	MotorController* stwheel;
-};
-union Motors {
-	Engines engines;
-	MotorController* list[];
-};
+
+MotorController* motors[2];
 
 int16_t servoPulseMin=1000;
 int16_t servoPulseMax=2000;
 int16_t servoDeadZone=50;
 int16_t servoTrim[INPINCNT]; //pulse time for neutral position
 
-Motors motors;
-
 void setup() {
 	//configure input pins as inputs and read initial values
-	for (uint8_t i=0; i<INPINCNT; i++) {
-		pinMode(inPinNo[i], INPUT);
-		inPinVal[i] = digitalRead(inPinNo[i]);
-		inPulseTime[i] = -1;
-		inPulseStart[i] = 0;
-		servoTrim[i] = (servoPulseMax + servoPulseMin)/2;
+	for (uint8_t pinIdx=0; pinIdx<INPINCNT; pinIdx++) {
+		pinMode(inPinNo[pinIdx], INPUT);
+		inPinVal[pinIdx] = digitalRead(inPinNo[pinIdx]);
+		inPulseTime[pinIdx] = -1;
+		inPulseStart[pinIdx] = 0;
+		servoTrim[pinIdx] = (servoPulseMax + servoPulseMin)/2;
 	}
-	motors.engines.drive = new MotorController(ENGFWDPIN, ENGBCKPIN, -1U);
-	motors.engines.stwheel = new MotorController(LEFTPIN, RIGHTPIN, -1U);
+	motors[0] = new MotorController(ENGFWDPIN, ENGBCKPIN, -1U);
+	motors[1] = new BinaryMotorController(LEFTPIN, RIGHTPIN, -1U);
 #ifdef DEBUG
 	Serial.begin(BAUDRATE);
 #endif
-	DEBUGOUT("\ndebug mode inputs:");
+	DEBUGOUT("debug mode inputs:");
 	DEBUGOUT(INPINCNT);
 	DEBUGOUT("\ntrim:");
 	DEBUGOUT(servoTrim[0]);
@@ -143,44 +136,53 @@ unsigned long loopcnt = 0;
 unsigned long nowus = 0;
 
 void loop() {
+	DEBUGOUT("t ");
+	DEBUGOUT(nowus);
+	DEBUGOUT("\n");
 	nowus = micros();
-	for (uint8_t i=0; i<INPINCNT; i++) {
-		uint8_t newPinVal = digitalRead(inPinNo[i]);
+	for (uint8_t pinIdx=0; pinIdx<INPINCNT; pinIdx++) {
+		uint8_t newPinVal = digitalRead(inPinNo[pinIdx]);
 		if (newPinVal == HIGH) {
-			if (inPinVal[i] == LOW) {
+			if (inPinVal[pinIdx] == LOW) {
 				//Low to High transition
-				inPulseStart[i] = nowus;
+				inPulseStart[pinIdx] = nowus;
+				DEBUGOUT(pinIdx);
+				DEBUGOUT(" . ");
+				DEBUGOUT(inPulseStart[pinIdx]);
+				DEBUGOUT("\n");
 			}
 		} else {
-			if (inPinVal[i] == HIGH) {
+			if (inPinVal[pinIdx] == HIGH) {
 				//High to Low transition
-				inPulseTime[i] = nowus - inPulseStart[i];
-				inPulseStart[i] = nowus;
-				if ((inPulseTime[i] > servoPulseMax) || (inPulseTime[i] < servoPulseMin)) {
-					inPulseTime[i] = -1;
+				inPulseTime[pinIdx] = nowus - inPulseStart[pinIdx];
+				DEBUGOUT(pinIdx);
+				DEBUGOUT(" _ ");
+				DEBUGOUT(inPulseStart[pinIdx]);
+				DEBUGOUT(" ");
+				DEBUGOUT(inPulseTime[pinIdx]);
+				inPulseStart[pinIdx] = nowus;
+				//DEBUGOUT("-");
+				//DEBUGOUT(servoTrim[pinIdx]);
+				//DEBUGOUT("=");
+				//DEBUGOUT(engVal);
+				DEBUGOUT("\n");
+				if ((inPulseTime[pinIdx] > servoPulseMax) || (inPulseTime[pinIdx] < servoPulseMin)) {
+					inPulseTime[pinIdx] = -1;
 				} else {
-					int engInt = inPulseTime[i] - servoTrim[i];
+					int engInt = inPulseTime[pinIdx] - servoTrim[pinIdx];
 					float engVal = 0;
 					if (abs(engInt) > servoDeadZone) {
 						engVal = (float)(engInt) / (float)(servoPulseMax - servoPulseMin) *2.0 ;
 					}
 					
-					motors.list[i]->set(engVal);
-					DEBUGOUT(i);
-					DEBUGOUT(" ");
-					DEBUGOUT(inPulseTime[i]);
-					DEBUGOUT("-");
-					DEBUGOUT(servoTrim[i]);
-					DEBUGOUT("=");
-					DEBUGOUT(engVal);
-					DEBUGOUT("\n");
+					motors[pinIdx]->set(engVal);
 				}
 			} 
 		}
-		inPinVal[i] = newPinVal;
-		if (inPulseStart[i] < nowus - 21000) {
+		inPinVal[pinIdx] = newPinVal;
+		if (inPulseStart[pinIdx] < nowus - 21000) {
 			//now pulse in last 20ms period
-			inPulseTime[i] = -1;
+			inPulseTime[pinIdx] = -1;
 		}
 	}
 #ifdef TESTOUTPIN
