@@ -109,7 +109,7 @@ void setup() {
 	}
 	motors[0] = new MotorController(ENGFWDPIN, ENGBCKPIN, -1U);
 	motors[0]->disableRampRate();
-	motors[1] = new BinaryMotorController(LEFTPIN, RIGHTPIN, -1U);
+	motors[1] = new MotorController(LEFTPIN, RIGHTPIN, -1U);
 	motors[1]->disableRampRate();
 #ifdef DEBUG
 	Serial.begin(BAUDRATE);
