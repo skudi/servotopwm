@@ -5,7 +5,7 @@
 #endif
 
 #include "MotorController.h"
-#include "BinaryMotorController.h"
+#include "OneDirMotorController.h"
 
 //servo inputs
 //number of input pins
@@ -17,6 +17,8 @@
 #define INPTHRPIN 2
 //steering wheel
 #define INPTURNPIN 3
+//Lights
+#define INPLIGHTPIN 4
 
 //PWM outputs
 /* PWM pins:
@@ -33,6 +35,7 @@
 #define ENGBCKPIN 10
 #define RIGHTPIN	6
 #define LEFTPIN	5
+#define LIGHTPIN 9
 
 #define BAUDRATE 9600
 
@@ -45,26 +48,30 @@
 #ifdef BOARD_NODEMCU
 /*
 * nodemcu pins:
-* D0 - gpio16
-* D1 - gpio5
-* D2 - gpio4
-* D3 - gpio0
-* D4 - gpio2
-* D5 - gpio14
-* D6 - gpio12
-* D8 - gpio15
+* D0 - gpio16 - output PWM Lights
+* D1 - gpio5  - output PWM engine 
+* D2 - gpio4  - output PWM engine
+* D3 - gpio0  - output PWM steering
+* D4 - gpio2  - output PWM steering
+* D5 - gpio14 - input (servo pulses) throtle
+* D6 - gpio12 - input (servo pulses) steering
+* D7 - gpio13 - input (servo pulses) lights
+* D8 - gpio15 - 
 */
 
 //throttle
 #define INPTHRPIN 14
 //steering wheel
 #define INPTURNPIN 12
+//Lights
+#define INPLIGHTPIN 13
 
 //PWM outputs
 #define ENGFWDPIN 5
 #define ENGBCKPIN 4
 #define RIGHTPIN	0
 #define LEFTPIN	2
+#define LIGHTPIN 16
 
 #define BAUDRATE 115200
 
@@ -86,12 +93,12 @@
 Servo testout;
 #endif
 
-uint8_t inPinNo[] = {INPTHRPIN, INPTURNPIN};
+uint8_t inPinNo[] = {INPTHRPIN, INPTURNPIN, INPLIGHTPIN};
 int16_t inPulseTime[INPINCNT]; //length of the throttle pulse [us], -1 = invalid
 unsigned long inPulseStart[INPINCNT]; //begin of pulse micros()
 uint8_t inPinVal[INPINCNT];
 
-MotorController* motors[2];
+MotorController* motors[3];
 
 int16_t servoPulseMin=1000;
 int16_t servoPulseMax=2000;
@@ -109,6 +116,7 @@ void setup() {
 	}
 	motors[0] = new MotorController(ENGFWDPIN, ENGBCKPIN, -1U);
 	motors[1] = new MotorController(LEFTPIN, RIGHTPIN, -1U);
+	motors[2] = new OneDirMotorController(LIGHTPIN, 0.8);
 #ifdef DEBUG
 	Serial.begin(BAUDRATE);
 #endif
