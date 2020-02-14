@@ -1,9 +1,14 @@
 #include <Arduino.h>
-#ifdef DEBUG
+
+//define pin for test output for test signal generator
+//#define TESTOUTPIN 15
+
+#ifdef TESTOUTPIN
 //Servo library for generating test signal
 #include <Servo.h>
 #endif
 
+#include "MotorControllerInterface.h"
 #include "MotorController.h"
 #include "OneDirMotorController.h"
 
@@ -37,13 +42,7 @@
 #define LEFTPIN	5
 #define LIGHTPIN 9
 
-#define BAUDRATE 9600
-
-#ifdef DEBUG
-//#define TESTOUTPIN 9
-#endif
-
-#endif
+#endif //BOARD_NANO
 
 #ifdef BOARD_NODEMCU
 /*
@@ -73,12 +72,6 @@
 #define LEFTPIN	2
 #define LIGHTPIN 16
 
-#define BAUDRATE 115200
-
-#ifdef DEBUG
-//#define TESTOUTPIN 15
-#endif
-
 #endif
 
 #ifdef DEBUG
@@ -98,7 +91,7 @@ int16_t inPulseTime[INPINCNT]; //length of the throttle pulse [us], -1 = invalid
 unsigned long inPulseStart[INPINCNT]; //begin of pulse micros()
 uint8_t inPinVal[INPINCNT];
 
-MotorController* motors[3];
+MotorControllerInterface* motors[3];
 
 int16_t servoPulseMin=1000;
 int16_t servoPulseMax=2000;
@@ -106,6 +99,10 @@ int16_t servoDeadZone=50;
 int16_t servoTrim[INPINCNT]; //pulse time for neutral position
 
 void setup() {
+	Serial.begin(BAUDRATE);
+	Serial.print("\n\ninitialize\n\nmode inputs:");
+	Serial.print(INPINCNT);
+	Serial.print("\n");
 	//configure input pins as inputs and read initial values
 	for (uint8_t pinIdx=0; pinIdx<INPINCNT; pinIdx++) {
 		pinMode(inPinNo[pinIdx], INPUT);
@@ -114,19 +111,18 @@ void setup() {
 		inPulseStart[pinIdx] = 0;
 		servoTrim[pinIdx] = (servoPulseMax + servoPulseMin)/2;
 	}
-	motors[0] = new MotorController(ENGFWDPIN, ENGBCKPIN, -1U);
-	motors[1] = new MotorController(LEFTPIN, RIGHTPIN, -1U);
-	motors[2] = new OneDirMotorController(LIGHTPIN, 0.8);
-#ifdef DEBUG
-	Serial.begin(BAUDRATE);
-#endif
-	DEBUGOUT("debug mode inputs:");
-	DEBUGOUT(INPINCNT);
-	DEBUGOUT("\ntrim:");
-	DEBUGOUT(servoTrim[0]);
-	DEBUGOUT(",");
-	DEBUGOUT(servoTrim[1]);
-	DEBUGOUT("\n");
+	motors[0] = new MotorController(ENGFWDPIN, ENGBCKPIN, false);
+	motors[1] = new MotorController(LEFTPIN, RIGHTPIN, false);
+	motors[2] = new OneDirMotorController(LIGHTPIN);
+	Serial.print("Num, Digital.write, trim\n");
+	for (uint8_t pinIdx=0; pinIdx<INPINCNT; pinIdx++) {
+		Serial.print(pinIdx);
+		Serial.print(", ");
+		Serial.print(inPinNo[pinIdx]);
+		Serial.print(", ");
+		Serial.print(servoTrim[pinIdx]);
+		Serial.print("\n");
+	}
 #ifdef TESTOUTPIN
 	pinMode(TESTOUTPIN, OUTPUT);
 	testout.attach(TESTOUTPIN);
@@ -144,9 +140,6 @@ unsigned long loopcnt = 0;
 unsigned long nowus = 0;
 
 void loop() {
-	DEBUGOUT("t ");
-	DEBUGOUT(nowus);
-	DEBUGOUT("\n");
 	nowus = micros();
 	for (uint8_t pinIdx=0; pinIdx<INPINCNT; pinIdx++) {
 		uint8_t newPinVal = digitalRead(inPinNo[pinIdx]);
@@ -154,18 +147,19 @@ void loop() {
 			if (inPinVal[pinIdx] == LOW) {
 				//Low to High transition
 				inPulseStart[pinIdx] = nowus;
+				DEBUGOUT("\n");
 				DEBUGOUT(pinIdx);
 				DEBUGOUT(" . ");
 				DEBUGOUT(inPulseStart[pinIdx]);
-				DEBUGOUT("\n");
 			}
 		} else {
 			if (inPinVal[pinIdx] == HIGH) {
 				//High to Low transition
 				inPulseTime[pinIdx] = nowus - inPulseStart[pinIdx];
+				DEBUGOUT("\n");
 				DEBUGOUT(pinIdx);
 				DEBUGOUT(" _ ");
-				DEBUGOUT(inPulseStart[pinIdx]);
+				DEBUGOUT(nowus);
 				DEBUGOUT(" ");
 				DEBUGOUT(inPulseTime[pinIdx]);
 				inPulseStart[pinIdx] = nowus;
@@ -173,8 +167,7 @@ void loop() {
 				//DEBUGOUT(servoTrim[pinIdx]);
 				//DEBUGOUT("=");
 				//DEBUGOUT(engVal);
-				DEBUGOUT("\n");
-				if ((inPulseTime[pinIdx] > servoPulseMax) || (inPulseTime[pinIdx] < servoPulseMin)) {
+				if ((inPulseTime[pinIdx] > 2700) || (inPulseTime[pinIdx] < 300)) {
 					inPulseTime[pinIdx] = -1;
 				} else {
 					int engInt = inPulseTime[pinIdx] - servoTrim[pinIdx];
@@ -182,7 +175,11 @@ void loop() {
 					if (abs(engInt) > servoDeadZone) {
 						engVal = (float)(engInt) / (float)(servoPulseMax - servoPulseMin) *2.0 ;
 					}
-					
+					DEBUGOUT("\n");
+					DEBUGOUT(pinIdx);
+					DEBUGOUT(" s ");
+					DEBUGOUT(engVal);
+					DEBUGOUT("\n");
 					motors[pinIdx]->set(engVal);
 				}
 			} 
@@ -201,7 +198,6 @@ void loop() {
 			step = -step;
 			duty+=step;
 		}
-		analogWrite(ENGFWDPIN, duty * PWMRANGE);
 		testout.write(180*duty);
 		lastms = millis();
 	}
