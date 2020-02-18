@@ -12,11 +12,9 @@
 #include "MotorController.h"
 #include "OneDirMotorController.h"
 
-//servo inputs
-//number of input pins
-#define INPINCNT sizeof(inPinNo)/sizeof(inPinNo[0])
-
 #ifdef BOARD_NANO
+
+//servo inputs:
 
 //throttle
 #define INPTHRPIN 2
@@ -87,16 +85,28 @@ Servo testout;
 #endif
 
 uint8_t inPinNo[] = {INPTHRPIN, INPTURNPIN, INPLIGHTPIN};
+
+//number of input pins
+#define INPINCNT sizeof(inPinNo)/sizeof(inPinNo[0])
+
 int16_t inPulseTime[INPINCNT]; //length of the throttle pulse [us], -1 = invalid
 unsigned long inPulseStart[INPINCNT]; //begin of pulse micros()
 uint8_t inPinVal[INPINCNT];
 
-MotorControllerInterface* motors[3];
+#define MOTORCNT 3
+MotorControllerInterface* motors[MOTORCNT];
 
 int16_t servoPulseMin=1000;
 int16_t servoPulseMax=2000;
 int16_t servoDeadZone=50;
 int16_t servoTrim[INPINCNT]; //pulse time for neutral position
+
+//mixinng input values to motor controllers
+float mixer[MOTORCNT][INPINCNT] = {
+	{1.0,0.0,0.0},
+	{0.0,1.0,0.0},
+	{0.0,0.0,1.0}
+};
 
 void setup() {
 	Serial.begin(BAUDRATE);
@@ -123,6 +133,16 @@ void setup() {
 		Serial.print(servoTrim[pinIdx]);
 		Serial.print("\n");
 	}
+	Serial.print("mixer output: inputs ratios\n");
+	for (uint8_t motorno = 0; motorno < MOTORCNT; motorno++) {
+		Serial.print(motorno);
+		Serial.print(": ");
+		for (uint8_t inputno = 0; inputno < INPINCNT; inputno++) {
+			Serial.print(mixer[motorno][inputno] );
+			Serial.print(", ");
+		}
+		Serial.print("\n");
+	}
 #ifdef TESTOUTPIN
 	pinMode(TESTOUTPIN, OUTPUT);
 	testout.attach(TESTOUTPIN);
@@ -147,48 +167,36 @@ void loop() {
 			if (inPinVal[pinIdx] == LOW) {
 				//Low to High transition
 				inPulseStart[pinIdx] = nowus;
-				DEBUGOUT("\n");
-				DEBUGOUT(pinIdx);
-				DEBUGOUT(" . ");
-				DEBUGOUT(inPulseStart[pinIdx]);
 			}
 		} else {
 			if (inPinVal[pinIdx] == HIGH) {
 				//High to Low transition
-				inPulseTime[pinIdx] = nowus - inPulseStart[pinIdx];
-				DEBUGOUT("\n");
-				DEBUGOUT(pinIdx);
-				DEBUGOUT(" _ ");
-				DEBUGOUT(nowus);
-				DEBUGOUT(" ");
-				DEBUGOUT(inPulseTime[pinIdx]);
+				uint16_t pulseTime = nowus - inPulseStart[pinIdx];
 				inPulseStart[pinIdx] = nowus;
-				//DEBUGOUT("-");
-				//DEBUGOUT(servoTrim[pinIdx]);
-				//DEBUGOUT("=");
-				//DEBUGOUT(engVal);
-				if ((inPulseTime[pinIdx] > 2700) || (inPulseTime[pinIdx] < 300)) {
-					inPulseTime[pinIdx] = -1;
-				} else {
-					int engInt = inPulseTime[pinIdx] - servoTrim[pinIdx];
-					float engVal = 0;
-					if (abs(engInt) > servoDeadZone) {
-						engVal = (float)(engInt) / (float)(servoPulseMax - servoPulseMin) *2.0 ;
-					}
-					DEBUGOUT("\n");
-					DEBUGOUT(pinIdx);
-					DEBUGOUT(" s ");
-					DEBUGOUT(engVal);
-					DEBUGOUT("\n");
-					motors[pinIdx]->set(engVal);
+				if ((pulseTime < 2700) || (pulseTime > 300)) {
+					//valid value, store it
+					inPulseTime[pinIdx] = pulseTime;
 				}
 			} 
 		}
 		inPinVal[pinIdx] = newPinVal;
 		if (inPulseStart[pinIdx] < nowus - 21000) {
-			//now pulse in last 20ms period
+			//no pulse in last 20ms period
 			inPulseTime[pinIdx] = -1;
 		}
+	}
+	for (uint8_t motorno = 0; motorno < MOTORCNT; motorno++) {
+		float engVal = 0;
+		for (uint8_t inputno = 0; inputno < INPINCNT; inputno++) {
+			if (inPulseTime[inputno] == -1) continue;
+			if (mixer[motorno][inputno] == 0.0) continue;
+			int engInt = inPulseTime[inputno] - servoTrim[inputno];
+			if (abs(engInt) < servoDeadZone) {
+				engInt = 0;
+			}
+			engVal += (float)(engInt << 1) / (float)(servoPulseMax - servoPulseMin) * mixer[motorno][inputno] ;
+		}
+		motors[motorno]->set(engVal);
 	}
 #ifdef TESTOUTPIN
 	if (millis() >= lastms + 20) {
