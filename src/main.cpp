@@ -102,6 +102,12 @@ int16_t servoDeadZone=50;
 int16_t servoTrim[INPINCNT]; //pulse time for neutral position
 
 //mixinng input values to motor controllers
+float mixertank[MOTORCNT][INPINCNT] = {
+	{1.0,1.0,0.0},
+	{1.0,-1.0,0.0},
+	{0.0,0.0,1.0}
+};
+
 float mixer[MOTORCNT][INPINCNT] = {
 	{1.0,0.0,0.0},
 	{0.0,1.0,0.0},
